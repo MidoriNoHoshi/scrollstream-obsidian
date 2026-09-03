@@ -2,7 +2,7 @@
 	"id": "scrollstream",
 	"name": "ScrollStream",
 	"version": "1.0.1",
-	"minAppVersion": "1.0.0",
+	"minAppVersion": "1.0.1",
 	"description": "Notes stream in tandem with relevant chapters as you read your document.",
 	"author": "MidoriNoHoshi",
 	"authorUrl": "https://github.com/MidoriNoHoshi",
