@@ -1,4 +1,4 @@
-# Tandem
+# ScrollStream
 
 Notes stream in tandem with relevant chapters as you read your document.
 

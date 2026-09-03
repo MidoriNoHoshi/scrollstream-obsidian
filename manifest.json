@@ -1,6 +1,6 @@
 {
-	"id": "tandem",
-	"name": "Tandem",
+	"id": "scrollstream",
+	"name": "ScrollStream",
 	"version": "1.0.0",
 	"minAppVersion": "1.0.0",
 	"description": "Notes stream in tandem with relevant chapters as you read your document.",

@@ -1,5 +1,5 @@
 {
-	"name": "tandem",
+	"name": "scrollstream",
 	"version": "1.0.0",
 	"description": "Notes stream in tandem with relevant chapters as you read your document.",
 	"main": "main.js",
@@ -11,9 +11,9 @@
 		"obsidian",
 		"obsidian-plugin",
 		"timeline",
-		"marginalia",
-		"scrollytelling",
-		"sidecar"
+		"scrollstream",
+		"sidecar",
+		"marginalia"
 	],
 	"author": "MidoriNoHoshi",
 	"license": "MIT"
