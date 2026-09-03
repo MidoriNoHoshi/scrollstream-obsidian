@@ -1,0 +1,20 @@
+{
+	"name": "tandem",
+	"version": "1.0.0",
+	"description": "Notes stream in tandem with relevant chapters as you read your document.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "node esbuild.config.mjs production"
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"timeline",
+		"marginalia",
+		"scrollytelling",
+		"sidecar"
+	],
+	"author": "MidoriNoHoshi",
+	"license": "MIT"
+}

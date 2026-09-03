@@ -1,0 +1,107 @@
+.tlg-item {
+  position: relative;
+  padding-left: 20px;
+  margin: 28px 0;
+}
+
+/* Vertical line segment — each item draws its own piece, so consecutive
+   blocks read as one continuous line down the page. */
+.tlg-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: -28px;
+  left: 5px;
+  width: 1px;
+  background: var(--background-modifier-border);
+}
+
+.tlg-item:last-child::before {
+  bottom: 0;
+}
+
+.tlg-marker {
+  position: absolute;
+  top: 4px;
+  left: 1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--background-primary);
+  border: 1.5px solid var(--text-muted);
+}
+
+.tlg-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tlg-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tlg-timestamp {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+
+.tlg-section {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--background-modifier-border);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+.tlg-gallery {
+  display: grid;
+  grid-template-columns: repeat(var(--tlg-columns, 2), 1fr);
+  gap: 8px;
+}
+
+.tlg-image-wrap {
+  border: 1px solid var(--background-modifier-border);
+  padding: 3px;
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+
+.tlg-image-wrap img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  cursor: zoom-in;
+  transition:
+    transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.3s ease;
+}
+
+.tlg-image-wrap img:hover {
+  transform: scale(1.08);
+  position: relative;
+  z-index: 10;
+}
+
+.tlg-missing {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: var(--text-error);
+  padding: 8px;
+}
+
+.tlg-caption {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
