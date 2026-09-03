@@ -1,6 +1,6 @@
 {
 	"name": "scrollstream-obsidian",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Notes stream in tandem with relevant chapters as you read your document.",
 	"main": "main.js",
 	"scripts": {
