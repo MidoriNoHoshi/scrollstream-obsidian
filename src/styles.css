@@ -1,27 +1,28 @@
 :root {
-	--tlg-split-left: 70%;
-	--tlg-split-right: 30%;
+	--tlg-split-left: 50%;
+	--tlg-split-right: 50%;
 }
 
-/* Split view transformation on Reading View.
-   NOTE: the native Reading view scroll pane is `.markdown-reading-view`,
-   not `.markdown-rendered` (that class only appears when the
-   MarkdownRenderer API is invoked manually).
+.tlg-codeblock-hidden {
+	display: none !important;
+}
 
-   The actual `display: flex` / `flex-direction` / pane sizing is applied
-   by main.ts as JS-set `!important` inline styles (see applyOrientation) —
-   that reliably beats theme/snippet CSS, which is what was silently
-   collapsing this back into stacked block flow. The rules below are just
-   a sane fallback plus the per-orientation cosmetics (border side,
-   padding) that don't need to fight the cascade. */
+/* Split layout on reading view */
 .markdown-reading-view.tlg-split-active {
-	display: flex;
-	flex-direction: row;
+	display: flex !important;
 	justify-content: space-between;
-	width: 100%;
-	max-width: 100%;
+	width: 100% !important;
+	max-width: 100% !important;
 	box-sizing: border-box;
 	gap: 24px;
+}
+
+.markdown-reading-view.tlg-split-active.tlg-orientation-vertical {
+	flex-direction: row !important;
+}
+
+.markdown-reading-view.tlg-split-active.tlg-orientation-horizontal {
+	flex-direction: column !important;
 }
 
 .markdown-reading-view.tlg-split-active > :not(.tlg-sidebar-track) {
@@ -29,23 +30,47 @@
 	overflow-wrap: break-word;
 }
 
-/* Timeline Track vertical. Default look */
+/* Vertical text pane sizing */
+.markdown-reading-view.tlg-split-active.tlg-orientation-vertical
+	> :not(.tlg-sidebar-track) {
+	flex: 0 0 calc(var(--tlg-split-left) - 12px) !important;
+	max-width: calc(var(--tlg-split-left) - 12px) !important;
+}
+
+/* Horizontal text pane sizing */
+.markdown-reading-view.tlg-split-active.tlg-orientation-horizontal
+	> :not(.tlg-sidebar-track) {
+	flex: 0 0 auto !important;
+	max-width: 100% !important;
+}
+
+/* Sidebar track */
 .tlg-sidebar-track {
-	overflow-y: auto;
-	overflow-x: hidden;
 	box-sizing: border-box;
+	overflow-x: hidden;
+}
+
+.markdown-reading-view.tlg-split-active.tlg-orientation-vertical
+	> .tlg-sidebar-track {
+	flex: 0 0 calc(var(--tlg-split-right) - 12px) !important;
+	max-width: calc(var(--tlg-split-right) - 12px) !important;
+	position: sticky !important;
+	top: 0 !important;
+	max-height: calc(100vh - 40px) !important;
+	overflow-y: auto !important;
 	padding-left: 16px;
 	border-left: 2px solid var(--background-modifier-border);
 }
 
-/* Horizontal  */
-.markdown-reading-view.tlg-split-active[data-tlg-orientation='horizontal']
+.markdown-reading-view.tlg-split-active.tlg-orientation-horizontal
 	> .tlg-sidebar-track {
-	padding-left: 0;
+	flex: 0 0 auto !important;
+	max-width: 100% !important;
+	position: static !important;
+	max-height: none !important;
+	overflow-y: visible !important;
 	padding-top: 16px;
-	border-left: none;
 	border-top: 1px solid var(--background-modifier-border);
-	overflow-y: visible;
 }
 
 /* Timeline Item Nodes */
@@ -108,22 +133,28 @@
 	flex-wrap: wrap;
 }
 
+/* Timestamp: Base styles */
 .tlg-timestamp {
 	font-family: var(--font-monospace);
+	display: inline-block;
+}
+
+/* 1. Default (faint monospace) */
+.tlg-track-timestamp-default .tlg-timestamp {
 	font-size: 11px;
 	color: var(--text-faint);
 }
 
-/* 1. Accent color */
-[data-tlg-timestamp-style='accent'] .tlg-timestamp {
+/* 2. Accent color (high contrast) */
+.tlg-track-timestamp-accent .tlg-timestamp {
 	font-size: 12px;
 	font-weight: 600;
 	color: var(--text-accent);
 	letter-spacing: 0.02em;
 }
 
-/* 2. Badge / pill */
-[data-tlg-timestamp-style='badge'] .tlg-timestamp {
+/* 3. Badge / pill */
+.tlg-track-timestamp-badge .tlg-timestamp {
 	font-size: 11px;
 	font-weight: 600;
 	color: var(--text-normal);
@@ -134,15 +165,15 @@
 	letter-spacing: 0.03em;
 }
 
-/* 3. Dynamic sync. Highlights when parent item is active */
-[data-tlg-timestamp-style='active-sync'] .tlg-timestamp {
+/* 4. Dynamic sync (highlights when parent item is active) */
+.tlg-track-timestamp-active-sync .tlg-timestamp {
 	font-size: 12px;
 	font-weight: 500;
 	color: var(--text-muted);
 	transition: color 0.2s ease;
 }
 
-[data-tlg-timestamp-style='active-sync'] .tlg-item.is-active .tlg-timestamp {
+.tlg-track-timestamp-active-sync .tlg-item.is-active .tlg-timestamp {
 	color: var(--interactive-accent);
 	font-weight: 600;
 }
@@ -167,6 +198,14 @@
 	width: 100%;
 	border-radius: 4px;
 	display: block;
+}
+
+.tlg-missing {
+	padding: 8px;
+	font-size: 12px;
+	color: var(--text-faint);
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 4px;
 }
 
 .tlg-body {

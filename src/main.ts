@@ -1,8 +1,15 @@
-import { Plugin, MarkdownRenderer, MarkdownView, TFile } from 'obsidian';
+import {
+	Plugin,
+	MarkdownRenderer,
+	MarkdownView,
+	TFile,
+	Component,
+} from 'obsidian';
 import {
 	TimelineSettings,
 	DEFAULT_SETTINGS,
 	TimelineSettingTab,
+	TimestampStyle,
 } from './settings';
 
 interface TimelineImage {
@@ -22,25 +29,22 @@ interface TimelineEntryData {
 
 function normalizeHeading(text: string): string {
 	return text
-		.replace(/^#+\s+/, '') // Strip markdown hashes
-		.replace(/\[\[(.*?)\]\]/g, '$1') // Strip wikilinks
+		.replace(/^#+\s+/, '')
+		.replace(/\[\[(.*?)\]\]/g, '$1')
 		.trim()
 		.toLowerCase();
 }
 
 function cleanHeadingText(text: string): string {
 	return text
-		.replace(/^#+\s+/, '') // Strip markdown hashes
-		.replace(/\[\[(.*?)\]\]/g, '$1') // Strip wikilinks
-		.replace(/^[\d.]+\s*/, '') // Strip leading section numbering (e.g., "1. ", "2.1 ")
-		.split(/[\s—–:-]+/)[0] // Extract primary topic token before dashes/subtitles
+		.replace(/^#+\s+/, '')
+		.replace(/\[\[(.*?)\]\]/g, '$1')
+		.replace(/^[\d.]+\s*/, '')
+		.split(/[\s—–:-]+/)[0]
 		.trim()
 		.toLowerCase();
 }
 
-/**
- * Parses a single block and associates it with its explicit or auto chapter
- */
 function parseTimelineBlock(
 	source: string,
 	lineStart: number,
@@ -83,11 +87,12 @@ function parseTimelineBlock(
 		switch (key) {
 			case 'image': {
 				const [p, ...altParts] = value.split('|').map((s) => s.trim());
-				if (p)
+				if (p) {
 					data.images.push({
 						path: p,
 						alt: altParts.join('|') || '',
 					});
+				}
 				break;
 			}
 			case 'images': {
@@ -129,37 +134,38 @@ export default class TimelineGalleryPlugin extends Plugin {
 	private observers: Map<HTMLElement, IntersectionObserver> = new Map();
 	private mutationObservers: Map<HTMLElement, MutationObserver> = new Map();
 	private splitContainers: Set<HTMLElement> = new Set();
+	private renderComponents: Map<HTMLElement, Component> = new Map();
 
 	async onload() {
 		await this.loadSettings();
 		this.addSettingTab(new TimelineSettingTab(this.app, this));
 		this.updateLayoutVariables();
 
-		this.registerMarkdownCodeBlockProcessor('timeline', (source, el) => {
-			el.style.display = 'none';
+		this.registerMarkdownCodeBlockProcessor('timeline', (_source, el) => {
+			el.addClass('tlg-codeblock-hidden');
 		});
 
 		this.registerEvent(
-			this.app.workspace.on('file-open', () =>
-				this.refreshActiveTimeline(),
-			),
+			this.app.workspace.on('file-open', () => {
+				void this.refreshActiveTimeline();
+			}),
 		);
 		this.registerEvent(
-			this.app.workspace.on('layout-change', () =>
-				this.refreshActiveTimeline(),
-			),
+			this.app.workspace.on('layout-change', () => {
+				void this.refreshActiveTimeline();
+			}),
 		);
 		this.registerEvent(
 			this.app.metadataCache.on('changed', (file) => {
 				const activeView =
 					this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (activeView?.file?.path === file.path) {
-					this.refreshActiveTimeline();
+					void this.refreshActiveTimeline();
 				}
 			}),
 		);
 
-		this.refreshActiveTimeline();
+		void this.refreshActiveTimeline();
 	}
 
 	onunload() {
@@ -167,9 +173,9 @@ export default class TimelineGalleryPlugin extends Plugin {
 		this.observers.clear();
 		this.mutationObservers.forEach((obs) => obs.disconnect());
 		this.mutationObservers.clear();
+		this.renderComponents.forEach((comp) => comp.unload());
+		this.renderComponents.clear();
 		this.splitContainers.clear();
-
-		delete document.documentElement.dataset.tlgTimestampStyle;
 
 		document.body
 			.querySelectorAll('.tlg-sidebar-track')
@@ -180,11 +186,9 @@ export default class TimelineGalleryPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			await this.loadData(),
-		);
+		const loadedData =
+			(await this.loadData()) as Partial<TimelineSettings> | null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData ?? {});
 	}
 
 	async saveSettings() {
@@ -194,6 +198,7 @@ export default class TimelineGalleryPlugin extends Plugin {
 	updateLayoutVariables() {
 		const left = this.settings.splitRatioLeft;
 		const right = 100 - left;
+
 		document.documentElement.style.setProperty(
 			'--tlg-split-left',
 			`${left}%`,
@@ -203,77 +208,32 @@ export default class TimelineGalleryPlugin extends Plugin {
 			`${right}%`,
 		);
 
-		document.documentElement.dataset.tlgTimestampStyle =
-			this.settings.timestampStyle;
+		this.splitContainers.forEach((container) => {
+			this.applyOrientation(container);
+			const track = container.querySelector<HTMLElement>(
+				':scope > .tlg-sidebar-track',
+			);
+			if (track) {
+				this.applyTimestampClass(track, this.settings.timestampStyle);
+			}
+		});
+	}
 
-		this.splitContainers.forEach((container) =>
-			this.applyOrientation(container),
+	private applyTimestampClass(track: HTMLElement, style: TimestampStyle) {
+		track.removeClass(
+			'tlg-track-timestamp-accent',
+			'tlg-track-timestamp-badge',
+			'tlg-track-timestamp-active-sync',
+			'tlg-track-timestamp-default',
 		);
+		track.addClass(`tlg-track-timestamp-${style}`);
 	}
 
 	private applyOrientation(container: HTMLElement) {
 		const isVertical = this.settings.splitOrientation === 'vertical';
 		container.dataset.tlgOrientation = this.settings.splitOrientation;
-		container.style.setProperty('display', 'flex', 'important');
-		container.style.setProperty(
-			'flex-direction',
-			isVertical ? 'row' : 'column',
-			'important',
-		);
-
-		const textPane = container.querySelector<HTMLElement>(
-			':scope > :not(.tlg-sidebar-track)',
-		);
-		const track = container.querySelector<HTMLElement>(
-			':scope > .tlg-sidebar-track',
-		);
-
-		if (textPane) {
-			if (isVertical) {
-				textPane.style.setProperty(
-					'flex',
-					'0 0 calc(var(--tlg-split-left) - 12px)',
-					'important',
-				);
-				textPane.style.setProperty(
-					'max-width',
-					'calc(var(--tlg-split-left) - 12px)',
-					'important',
-				);
-			} else {
-				textPane.style.setProperty('flex', '0 0 auto', 'important');
-				textPane.style.setProperty('max-width', '100%', 'important');
-			}
-		}
-
-		if (track) {
-			if (isVertical) {
-				track.style.setProperty(
-					'flex',
-					'0 0 calc(var(--tlg-split-right) - 12px)',
-					'important',
-				);
-				track.style.setProperty(
-					'max-width',
-					'calc(var(--tlg-split-right) - 12px)',
-					'important',
-				);
-				track.style.setProperty('position', 'sticky', 'important');
-				track.style.setProperty('top', '0', 'important');
-				track.style.setProperty(
-					'max-height',
-					'calc(100vh - 40px)',
-					'important',
-				);
-				track.style.setProperty('overflow-y', 'auto', 'important');
-			} else {
-				track.style.setProperty('flex', '0 0 auto', 'important');
-				track.style.setProperty('max-width', '100%', 'important');
-				track.style.setProperty('position', 'static', 'important');
-				track.style.setProperty('max-height', 'none', 'important');
-				track.style.setProperty('overflow-y', 'visible', 'important');
-			}
-		}
+		container.toggleClass('tlg-orientation-vertical', isVertical);
+		container.toggleClass('tlg-orientation-horizontal', !isVertical);
 	}
 
 	private resolveImageSrc(
@@ -295,10 +255,6 @@ export default class TimelineGalleryPlugin extends Plugin {
 		return null;
 	}
 
-	/**
-	 * Parses the markdown file text sequentially, calculating line positions
-	 * and tracking the active heading for automatic block association.
-	 */
 	private extractTimelineBlocksFromText(
 		content: string,
 	): TimelineEntryData[] {
@@ -360,6 +316,8 @@ export default class TimelineGalleryPlugin extends Plugin {
 		);
 		if (entries.length === 0) {
 			if (track) {
+				this.renderComponents.get(track)?.unload();
+				this.renderComponents.delete(track);
 				track.remove();
 				container.removeClass('tlg-split-active');
 			}
@@ -373,6 +331,13 @@ export default class TimelineGalleryPlugin extends Plugin {
 			this.splitContainers.add(container);
 			this.applyOrientation(container);
 		}
+
+		this.applyTimestampClass(track, this.settings.timestampStyle);
+
+		this.renderComponents.get(track)?.unload();
+		const trackComponent = new Component();
+		trackComponent.load();
+		this.renderComponents.set(track, trackComponent);
 
 		track.empty();
 
@@ -429,7 +394,7 @@ export default class TimelineGalleryPlugin extends Plugin {
 					entry.bodyMarkdown,
 					bodyContainer,
 					view.file.path,
-					this,
+					trackComponent,
 				);
 			}
 
@@ -438,10 +403,6 @@ export default class TimelineGalleryPlugin extends Plugin {
 		this.setupHeadingObserver(container, track);
 	}
 
-	/**
-	 * Pairs IntersectionObserver with MutationObserver so virtualized headings
-	 * added to the DOM dynamically during scrolling are observed immediately.
-	 */
 	private setupHeadingObserver(
 		renderedContainer: HTMLElement,
 		track: HTMLElement,

@@ -5,7 +5,7 @@ export type SplitOrientation = 'vertical' | 'horizontal';
 export type TimestampStyle = 'default' | 'accent' | 'badge' | 'active-sync';
 
 export interface TimelineSettings {
-	splitRatioLeft: number; // Percentage for main document (default 50)
+	splitRatioLeft: number;
 	enableScrollStream: boolean;
 	splitOrientation: SplitOrientation;
 	timestampStyle: TimestampStyle;
@@ -57,7 +57,6 @@ export class TimelineSettingTab extends PluginSettingTab {
 				slider
 					.setLimits(20, 80, 5)
 					.setValue(this.plugin.settings.splitRatioLeft)
-					.setDynamicTooltip()
 					.onChange(async (value) => {
 						this.plugin.settings.splitRatioLeft = value;
 						await this.plugin.saveSettings();
