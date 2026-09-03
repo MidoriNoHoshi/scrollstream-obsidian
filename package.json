@@ -5,7 +5,8 @@
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "node esbuild.config.mjs production"
+		"build": "node esbuild.config.mjs production",
+		"lint": "eslint ."
 	},
 	"keywords": [
 		"obsidian",
@@ -23,8 +24,8 @@
 		"esbuild": "^0.21.0",
 		"eslint": "^9.0.0",
 		"eslint-plugin-obsidianmd": "^0.4.0",
-		"globals": "^17.12.0",
-		"jiti": "^2.7.0",
+		"globals": "^16.0.0",
+		"jiti": "^2.4.2",
 		"obsidian": "latest",
 		"tslib": "^2.6.0",
 		"typescript": "^5.4.0",
