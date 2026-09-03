@@ -6,14 +6,14 @@ export type TimestampStyle = 'default' | 'accent' | 'badge' | 'active-sync';
 
 export interface TimelineSettings {
 	splitRatioLeft: number; // Percentage for main document (default 50)
-	enableScrollytelling: boolean;
+	enableScrollStream: boolean;
 	splitOrientation: SplitOrientation;
 	timestampStyle: TimestampStyle;
 }
 
 export const DEFAULT_SETTINGS: TimelineSettings = {
 	splitRatioLeft: 50,
-	enableScrollytelling: true,
+	enableScrollStream: true,
 	splitOrientation: 'vertical',
 	timestampStyle: 'accent',
 };
