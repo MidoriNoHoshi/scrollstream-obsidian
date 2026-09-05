@@ -6,26 +6,34 @@ import {
 	Component,
 } from 'obsidian';
 import {
-	TimelineSettings,
+	ScrollstreamSettings,
 	DEFAULT_SETTINGS,
-	TimelineSettingTab,
+	ScrollstreamSettingTab,
 	TimestampStyle,
+	SplitOrientation,
 } from './settings';
 
-interface TimelineImage {
+interface ScrollstreamImage {
 	path: string;
 	alt: string;
 }
 
-interface TimelineEntryData {
+interface ScrollstreamEntryData {
 	lineStart: number;
-	images: TimelineImage[];
+	images: ScrollstreamImage[];
 	timestamp?: string;
 	chapter?: string;
 	boundHeading: string;
 	columns: number;
 	bodyMarkdown: string;
 }
+
+const KEY_ALIASES: Record<string, string> = {
+	img: 'image',
+	imgs: 'images',
+	colums: 'columns',
+	column: 'columns',
+};
 
 function normalizeHeading(text: string): string {
 	return text
@@ -36,21 +44,33 @@ function normalizeHeading(text: string): string {
 }
 
 function cleanHeadingText(text: string): string {
-	return text
+	const cleaned = text
 		.replace(/^#+\s+/, '')
 		.replace(/\[\[(.*?)\]\]/g, '$1')
-		.replace(/^[\d.]+\s*/, '')
-		.split(/[\s—–:-]+/)[0]
-		.trim()
-		.toLowerCase();
+		.replace(/^[\d.]+\s*/, '');
+	const firstSegment = cleaned.split(/[\s—–:-]+/)[0];
+	return (firstSegment ?? '').trim().toLowerCase();
 }
 
-function parseTimelineBlock(
+function parseOrientationOverride(
+	value: unknown,
+): SplitOrientation | undefined {
+	if (value === 'vertical' || value === 'horizontal') return value;
+	return undefined;
+}
+
+function parseRatioOverride(value: unknown): number | undefined {
+	const n = typeof value === 'number' ? value : Number(value);
+	if (!Number.isNaN(n) && n > 0 && n < 100) return n;
+	return undefined;
+}
+
+function parseScrollstreamBlock(
 	source: string,
 	lineStart: number,
 	precedingHeading: string,
-): TimelineEntryData {
-	const data: TimelineEntryData = {
+): ScrollstreamEntryData {
+	const data: ScrollstreamEntryData = {
 		lineStart,
 		images: [],
 		columns: 2,
@@ -80,7 +100,8 @@ function parseTimelineBlock(
 			continue;
 		}
 
-		const key = line.slice(0, sepIndex).trim().toLowerCase();
+		const rawKey = line.slice(0, sepIndex).trim().toLowerCase();
+		const key = KEY_ALIASES[rawKey] ?? rawKey;
 		const value = line.slice(sepIndex + 1).trim();
 		if (!value) continue;
 
@@ -129,30 +150,36 @@ function parseTimelineBlock(
 	return data;
 }
 
-export default class TimelineGalleryPlugin extends Plugin {
-	settings: TimelineSettings;
+export default class ScrollstreamGalleryPlugin extends Plugin {
+	settings!: ScrollstreamSettings;
 	private observers: Map<HTMLElement, IntersectionObserver> = new Map();
 	private mutationObservers: Map<HTMLElement, MutationObserver> = new Map();
 	private splitContainers: Set<HTMLElement> = new Set();
 	private renderComponents: Map<HTMLElement, Component> = new Map();
+	private orientationOverrides: Map<HTMLElement, SplitOrientation> =
+		new Map();
+	private lightboxEl: HTMLElement | null = null;
 
 	async onload() {
 		await this.loadSettings();
-		this.addSettingTab(new TimelineSettingTab(this.app, this));
+		this.addSettingTab(new ScrollstreamSettingTab(this.app, this));
 		this.updateLayoutVariables();
 
-		this.registerMarkdownCodeBlockProcessor('timeline', (_source, el) => {
-			el.addClass('tlg-codeblock-hidden');
-		});
+		this.registerMarkdownCodeBlockProcessor(
+			'scrollstream',
+			(_source, el) => {
+				el.addClass('tlg-codeblock-hidden');
+			},
+		);
 
 		this.registerEvent(
 			this.app.workspace.on('file-open', () => {
-				void this.refreshActiveTimeline();
+				void this.refreshActiveScrollstream();
 			}),
 		);
 		this.registerEvent(
 			this.app.workspace.on('layout-change', () => {
-				void this.refreshActiveTimeline();
+				void this.refreshActiveScrollstream();
 			}),
 		);
 		this.registerEvent(
@@ -160,12 +187,12 @@ export default class TimelineGalleryPlugin extends Plugin {
 				const activeView =
 					this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (activeView?.file?.path === file.path) {
-					void this.refreshActiveTimeline();
+					void this.refreshActiveScrollstream();
 				}
 			}),
 		);
 
-		void this.refreshActiveTimeline();
+		void this.refreshActiveScrollstream();
 	}
 
 	onunload() {
@@ -176,18 +203,24 @@ export default class TimelineGalleryPlugin extends Plugin {
 		this.renderComponents.forEach((comp) => comp.unload());
 		this.renderComponents.clear();
 		this.splitContainers.clear();
+		this.orientationOverrides.clear();
+
+		this.lightboxEl?.remove();
+		this.lightboxEl = null;
 
 		document.body
-			.querySelectorAll('.tlg-sidebar-track')
+			.querySelectorAll('.tlg-sidebar-track, .tlg-resizer')
 			.forEach((el) => el.remove());
-		document.body
-			.querySelectorAll('.tlg-split-active')
-			.forEach((el) => el.removeClass('tlg-split-active'));
+		document.body.querySelectorAll('.tlg-split-active').forEach((el) => {
+			el.removeClass('tlg-split-active');
+			el.removeClass('tlg-orientation-vertical');
+			el.removeClass('tlg-orientation-horizontal');
+		});
 	}
 
 	async loadSettings() {
 		const loadedData =
-			(await this.loadData()) as Partial<TimelineSettings> | null;
+			(await this.loadData()) as Partial<ScrollstreamSettings> | null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData ?? {});
 	}
 
@@ -209,7 +242,10 @@ export default class TimelineGalleryPlugin extends Plugin {
 		);
 
 		this.splitContainers.forEach((container) => {
-			this.applyOrientation(container);
+			this.applyOrientation(
+				container,
+				this.orientationOverrides.get(container),
+			);
 			const track = container.querySelector<HTMLElement>(
 				':scope > .tlg-sidebar-track',
 			);
@@ -217,6 +253,17 @@ export default class TimelineGalleryPlugin extends Plugin {
 				this.applyTimestampClass(track, this.settings.timestampStyle);
 			}
 		});
+	}
+
+	private applyOrientation(
+		container: HTMLElement,
+		override?: SplitOrientation,
+	) {
+		const effective = override ?? this.settings.splitOrientation;
+		const isVertical = effective === 'vertical';
+		container.dataset.tlgOrientation = effective;
+		container.toggleClass('tlg-orientation-vertical', isVertical);
+		container.toggleClass('tlg-orientation-horizontal', !isVertical);
 	}
 
 	private applyTimestampClass(track: HTMLElement, style: TimestampStyle) {
@@ -229,11 +276,59 @@ export default class TimelineGalleryPlugin extends Plugin {
 		track.addClass(`tlg-track-timestamp-${style}`);
 	}
 
-	private applyOrientation(container: HTMLElement) {
-		const isVertical = this.settings.splitOrientation === 'vertical';
-		container.dataset.tlgOrientation = this.settings.splitOrientation;
-		container.toggleClass('tlg-orientation-vertical', isVertical);
-		container.toggleClass('tlg-orientation-horizontal', !isVertical);
+	private ensureLightbox(): HTMLElement {
+		if (this.lightboxEl) return this.lightboxEl;
+		const overlay = document.body.createDiv({ cls: 'tlg-lightbox' });
+		overlay.createEl('img', { cls: 'tlg-lightbox-img' });
+		this.registerDomEvent(overlay, 'click', () => this.closeLightbox());
+		this.registerDomEvent(document, 'keydown', (evt: KeyboardEvent) => {
+			if (evt.key === 'Escape') this.closeLightbox();
+		});
+		this.lightboxEl = overlay;
+		return overlay;
+	}
+
+	private openLightbox(src: string, alt: string) {
+		const overlay = this.ensureLightbox();
+		const imgEl = overlay.querySelector('img') as HTMLImageElement;
+		imgEl.src = src;
+		imgEl.alt = alt;
+		overlay.addClass('tlg-lightbox-open');
+	}
+
+	private closeLightbox() {
+		this.lightboxEl?.removeClass('tlg-lightbox-open');
+	}
+
+	private focusAndRevealBlock(view: MarkdownView, lineStart: number) {
+		if (view.getMode() === 'preview') {
+			void view.setState(
+				{ ...view.getState(), mode: 'source' },
+				{ history: false },
+			);
+		}
+
+		const editor = view.editor;
+		editor.focus();
+
+		const targetLine = lineStart + 1;
+		const lineCount = editor.lineCount();
+		const safeLine = Math.min(targetLine, Math.max(0, lineCount - 1));
+
+		editor.setCursor({ line: safeLine, ch: 0 });
+
+		editor.setSelection(
+			{ line: lineStart, ch: 0 },
+			{ line: safeLine, ch: editor.getLine(safeLine)?.length ?? 0 },
+		);
+
+		editor.scrollIntoView(
+			{
+				from: { line: lineStart, ch: 0 },
+				to: { line: safeLine, ch: 0 },
+			},
+			true,
+		);
 	}
 
 	private resolveImageSrc(
@@ -255,10 +350,10 @@ export default class TimelineGalleryPlugin extends Plugin {
 		return null;
 	}
 
-	private extractTimelineBlocksFromText(
+	private extractScrollstreamBlocksFromText(
 		content: string,
-	): TimelineEntryData[] {
-		const entries: TimelineEntryData[] = [];
+	): ScrollstreamEntryData[] {
+		const entries: ScrollstreamEntryData[] = [];
 		const lines = content.split(/\r?\n/);
 		let currentHeading = 'root';
 		let inBlock = false;
@@ -266,16 +361,17 @@ export default class TimelineGalleryPlugin extends Plugin {
 		let blockStartLine = 0;
 
 		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			const trimmed = line.trim();
+			const rawLine = lines[i];
+			if (rawLine === undefined) continue;
+			const trimmed = rawLine.trim();
 
 			if (!inBlock) {
 				const headingMatch = trimmed.match(/^#{1,6}\s+(.+)$/);
-				if (headingMatch) {
+				if (headingMatch && headingMatch[1]) {
 					currentHeading = headingMatch[1].trim();
 				}
 
-				if (trimmed === '```timeline') {
+				if (trimmed === '```scrollstream') {
 					inBlock = true;
 					blockStartLine = i;
 					blockLines = [];
@@ -285,42 +381,104 @@ export default class TimelineGalleryPlugin extends Plugin {
 					inBlock = false;
 					const blockSource = blockLines.join('\n');
 					entries.push(
-						parseTimelineBlock(
+						parseScrollstreamBlock(
 							blockSource,
 							blockStartLine,
 							currentHeading,
 						),
 					);
 				} else {
-					blockLines.push(line);
+					blockLines.push(rawLine);
 				}
 			}
 		}
 		return entries;
 	}
 
-	private async refreshActiveTimeline() {
+	private teardownContainer(
+		container: HTMLElement,
+		track: HTMLElement | null,
+	) {
+		if (track) {
+			this.renderComponents.get(track)?.unload();
+			this.renderComponents.delete(track);
+			track.remove();
+		}
+
+		const resizer = container.querySelector<HTMLElement>(
+			':scope > .tlg-resizer',
+		);
+		resizer?.remove();
+
+		container.removeClass('tlg-split-active');
+		container.removeClass('tlg-orientation-vertical');
+		container.removeClass('tlg-orientation-horizontal');
+		container.style.removeProperty('--tlg-split-left');
+		container.style.removeProperty('--tlg-split-right');
+		container.style.removeProperty('--tlg-font-size');
+		container.style.removeProperty('--tlg-item-gap');
+		container.style.removeProperty('--tlg-radius');
+
+		this.splitContainers.delete(container);
+		this.orientationOverrides.delete(container);
+
+		this.observers.get(container)?.disconnect();
+		this.observers.delete(container);
+		this.mutationObservers.get(container)?.disconnect();
+		this.mutationObservers.delete(container);
+	}
+
+	private registerResizerDrag(resizer: HTMLElement, container: HTMLElement) {
+		resizer.addEventListener('pointerdown', (e: PointerEvent) => {
+			e.preventDefault();
+			const rect = container.getBoundingClientRect();
+			const isVertical =
+				container.dataset.tlgOrientation !== 'horizontal';
+
+			const onPointerMove = (moveEvent: PointerEvent) => {
+				let percentage: number;
+				if (isVertical) {
+					const leftOffset = moveEvent.clientX - rect.left;
+					percentage = (leftOffset / rect.width) * 100;
+				} else {
+					const topOffset = moveEvent.clientY - rect.top;
+					percentage = (topOffset / rect.height) * 100;
+				}
+
+				const clamped = Math.min(Math.max(percentage, 20), 80);
+				container.style.setProperty('--tlg-split-left', `${clamped}%`);
+				container.style.setProperty(
+					'--tlg-split-right',
+					`${100 - clamped}%`,
+				);
+			};
+
+			const onPointerUp = () => {
+				window.removeEventListener('pointermove', onPointerMove);
+				window.removeEventListener('pointerup', onPointerUp);
+			};
+
+			window.addEventListener('pointermove', onPointerMove);
+			window.addEventListener('pointerup', onPointerUp);
+		});
+	}
+
+	private async refreshActiveScrollstream() {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view || !view.file) return;
 
-		const container = view.contentEl.querySelector<HTMLElement>(
-			'.markdown-reading-view',
-		);
+		const container = view.contentEl;
 		if (!container) return;
 
 		const fileContent = await this.app.vault.cachedRead(view.file);
-		const entries = this.extractTimelineBlocksFromText(fileContent);
+		const entries = this.extractScrollstreamBlocksFromText(fileContent);
 
 		let track = container.querySelector<HTMLElement>(
 			':scope > .tlg-sidebar-track',
 		);
+
 		if (entries.length === 0) {
-			if (track) {
-				this.renderComponents.get(track)?.unload();
-				this.renderComponents.delete(track);
-				track.remove();
-				container.removeClass('tlg-split-active');
-			}
+			this.teardownContainer(container, track);
 			return;
 		}
 
@@ -329,7 +487,70 @@ export default class TimelineGalleryPlugin extends Plugin {
 			container.addClass('tlg-split-active');
 			container.appendChild(track);
 			this.splitContainers.add(container);
-			this.applyOrientation(container);
+		}
+
+		let resizer = container.querySelector<HTMLElement>(
+			':scope > .tlg-resizer',
+		);
+		if (!resizer) {
+			resizer = createDiv({ cls: 'tlg-resizer' });
+			container.insertBefore(resizer, track);
+			this.registerResizerDrag(resizer, container);
+		}
+
+		const cache = this.app.metadataCache.getFileCache(view.file);
+		const fm = cache?.frontmatter;
+		const orientationOverride = parseOrientationOverride(
+			fm?.['scrollstream-orientation'],
+		);
+		const ratioOverride = parseRatioOverride(fm?.['scrollstream-ratio']);
+
+		if (orientationOverride) {
+			this.orientationOverrides.set(container, orientationOverride);
+		} else {
+			this.orientationOverrides.delete(container);
+		}
+		this.applyOrientation(container, orientationOverride);
+
+		if (ratioOverride !== undefined) {
+			container.style.setProperty(
+				'--tlg-split-left',
+				`${ratioOverride}%`,
+			);
+			container.style.setProperty(
+				'--tlg-split-right',
+				`${100 - ratioOverride}%`,
+			);
+		} else {
+			container.style.removeProperty('--tlg-split-left');
+			container.style.removeProperty('--tlg-split-right');
+		}
+
+		if (fm?.['scrollstream-font-size']) {
+			container.style.setProperty(
+				'--tlg-font-size',
+				String(fm['scrollstream-font-size']),
+			);
+		} else {
+			container.style.removeProperty('--tlg-font-size');
+		}
+
+		if (fm?.['scrollstream-gap']) {
+			container.style.setProperty(
+				'--tlg-item-gap',
+				String(fm['scrollstream-gap']),
+			);
+		} else {
+			container.style.removeProperty('--tlg-item-gap');
+		}
+
+		if (fm?.['scrollstream-radius']) {
+			container.style.setProperty(
+				'--tlg-radius',
+				String(fm['scrollstream-radius']),
+			);
+		} else {
+			container.style.removeProperty('--tlg-radius');
 		}
 
 		this.applyTimestampClass(track, this.settings.timestampStyle);
@@ -350,6 +571,13 @@ export default class TimelineGalleryPlugin extends Plugin {
 			if (displaySection && displaySection !== 'root') {
 				item.dataset.section = displaySection;
 			}
+
+			item.addEventListener('click', (evt) => {
+				if ((evt.target as HTMLElement).closest('a, img, button')) {
+					return;
+				}
+				this.focusAndRevealBlock(view, entry.lineStart);
+			});
 
 			item.createDiv({ cls: 'tlg-marker' });
 			const content = item.createDiv({ cls: 'tlg-content' });
@@ -375,8 +603,12 @@ export default class TimelineGalleryPlugin extends Plugin {
 					const wrap = gallery.createDiv({ cls: 'tlg-image-wrap' });
 					const src = this.resolveImageSrc(img.path, view.file.path);
 					if (src) {
-						wrap.createEl('img', {
+						const imgEl = wrap.createEl('img', {
 							attr: { src, alt: img.alt || '' },
+						});
+						imgEl.addEventListener('click', (evt) => {
+							evt.stopPropagation();
+							this.openLightbox(src, img.alt || '');
 						});
 					} else {
 						wrap.createDiv({
@@ -408,7 +640,93 @@ export default class TimelineGalleryPlugin extends Plugin {
 		track: HTMLElement,
 	) {
 		this.observers.get(renderedContainer)?.disconnect();
+		this.observers.delete(renderedContainer);
 		this.mutationObservers.get(renderedContainer)?.disconnect();
+		this.mutationObservers.delete(renderedContainer);
+
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!view) return;
+
+		const activateTrackItemForHeading = (targetHeadingText: string) => {
+			const targetToken = cleanHeadingText(targetHeadingText);
+			if (!targetToken) return;
+
+			const items = Array.from(
+				track.querySelectorAll<HTMLElement>('.tlg-item'),
+			);
+			const targetItem = items.find((item) => {
+				const bound = (item.dataset.boundHeading || '')
+					.toLowerCase()
+					.trim();
+				return (
+					bound === targetToken ||
+					bound.includes(targetToken) ||
+					targetToken.includes(bound)
+				);
+			});
+
+			if (targetItem && !targetItem.hasClass('is-active')) {
+				targetItem.scrollIntoView({
+					behavior: 'smooth',
+					block: 'nearest',
+				});
+				track
+					.querySelectorAll('.tlg-item')
+					.forEach((i) => i.removeClass('is-active'));
+				targetItem.addClass('is-active');
+			}
+		};
+
+		if (view.getMode() !== 'preview') {
+			const scroller =
+				renderedContainer.querySelector<HTMLElement>('.cm-scroller');
+			if (!scroller) return;
+
+			let isThrottled = false;
+			const onEditorScroll = () => {
+				if (isThrottled) return;
+				isThrottled = true;
+
+				window.requestAnimationFrame(() => {
+					isThrottled = false;
+					if (!view.file) return;
+
+					const scrollInfo = view.editor.getScrollInfo();
+					const totalLines = view.editor.lineCount();
+					const approxLineHeight =
+						scroller.scrollHeight / Math.max(totalLines, 1);
+					const currentLine = Math.floor(
+						scrollInfo.top / approxLineHeight,
+					);
+
+					const cache = this.app.metadataCache.getFileCache(
+						view.file,
+					);
+					const headings = cache?.headings ?? [];
+
+					let activeHeading: string | null = null;
+					for (const h of headings) {
+						if (h.position.start.line <= currentLine) {
+							activeHeading = h.heading;
+						} else {
+							break;
+						}
+					}
+
+					if (activeHeading) {
+						activateTrackItemForHeading(activeHeading);
+					}
+				});
+			};
+
+			scroller.addEventListener('scroll', onEditorScroll, {
+				passive: true,
+			});
+			this.register(() =>
+				scroller.removeEventListener('scroll', onEditorScroll),
+			);
+			return;
+		}
 
 		const scrollContainer =
 			renderedContainer.querySelector<HTMLElement>(
@@ -436,37 +754,13 @@ export default class TimelineGalleryPlugin extends Plugin {
 						const targetToken = cleanHeadingText(rawText);
 						if (!targetToken) continue;
 
-						const items = Array.from(
-							track.querySelectorAll<HTMLElement>('.tlg-item'),
-						);
-						const targetItem = items.find((item) => {
-							const bound = (item.dataset.boundHeading || '')
-								.toLowerCase()
-								.trim();
-							return (
-								bound === targetToken ||
-								bound.includes(targetToken) ||
-								targetToken.includes(bound)
-							);
-						});
-
-						if (targetItem) {
-							targetItem.scrollIntoView({
-								behavior: 'smooth',
-								block: 'nearest',
-							});
-
-							track
-								.querySelectorAll('.tlg-item')
-								.forEach((i) => i.removeClass('is-active'));
-							targetItem.addClass('is-active');
-						}
+						activateTrackItemForHeading(targetToken);
 					}
 				}
 			},
 			{
-				root: null,
-				rootMargin: '-15% 0px -50% 0px',
+				root: scrollContainer,
+				rootMargin: '-10% 0px -40% 0px',
 				threshold: 0,
 			},
 		);

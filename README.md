@@ -1,30 +1,26 @@
 # ScrollStream
 
-Notes stream in tandem with relevant chapters as you read your document.
+Stream notes, media, derivations, and marginalia in tandem with relevant chapters as you read and write. Works with **Live Preview** as well.
 
 ---
 
 ## Features
 
-- **Heading Synchronization**: Links timeline blocks to specific headings or auto-binds them to the preceding chapter.
+- **Bidirectional View Sync**: Keeps auxiliary cards aligned with headings as you scroll through your document.
 
-- **Scrolling**: Automatically scrolls the associated timeline items into view.
+- **Frontmatter Overrides**: Customize track orientation, split ratio, card gap, font size, and image corner rounding per note via YAML.
 
-- **Flexible Layouts**: Switch between a side-by-side vertical split (customizable split ratio) and a stacked horizontal orientation.
+- **Media Galleries & Lightbox**: Embed multi-column image layouts with click-to-expand lightbox view.
 
-- **Dynamic Timestamps**: Format timestamps with multiple visual presets (High-contrast accent, Pill/Badge, or Active-state highlight).
-
-- **Multi-Column Media Galleries**: Embed single or multi-column image grids with alt text.
-
-- **Native Markdown & Math**: Supports standard Markdown rendering and LaTeX math blocks inside the timeline.
+- **Native Markdown & Math**: Supports standard Obsidian markdown, callouts, and LaTeX math blocks ($inline$ and $$display$$).
 
 ---
 
 ## Syntax
 
-Declare auxiliary nodes anywhere in your document using the `timeline` codeblock:
+Declare stream nodes anywhere in your document using the `scrollstream` codeblock:
 
-```timeline
+```scrollstream
 section: Vectors
 timestamp: Derivation 1.2
 columns: 2
@@ -35,35 +31,77 @@ The vector projection of $\vec{u}$ onto $\vec{v}$ is given by:
 $$P_{\vec{v}}(\vec{u}) = \frac{\vec{u} \cdot \vec{v}}{\|\vec{v}\|^2}\vec{v}$$
 ```
 
-### Block Configuration
+### Block Attributes
 
-| Key                   | Description                                                                           | Default                      |
-| :-------------------- | :------------------------------------------------------------------------------------ | :--------------------------- |
-| `section` / `chapter` | Specific heading to associate to. Set to `auto` to bind to the preceding `#` heading. | Preceding heading            |
-| `timestamp` / `date`  | Text or date string rendered in the node header.                                      | Optional                     |
-| `image`               | Single image reference (`path                                                         | alt text`or`[[wiki-link]]`). | Optional |
-| `images`              | Comma-separated list of image paths or wikilinks.                                     | Optional                     |
-| `columns`             | Number of columns for image grid rendering.                                           | `2`                          |
-| `---`                 | Divider line separating metadata attributes from the node body.                       | Required before body         |
+| Key                   | Description                                                                                   | Default              |
+| :-------------------- | :-------------------------------------------------------------------------------------------- | :------------------- |
+| `section` / `chapter` | Heading to associate to. Set to `auto` or omit to associate to the nearest preceding heading. | Preceding heading    |
+| `timestamp` / `date`  | Timestamp or label string displayed in the item header.                                       | Optional             |
+| `image`               | Single image reference (`path \| alt text` or `[[wiki-link]]`).                               | Optional             |
+| `images`              | Comma-separated list of image paths or wikilinks.                                             | Optional             |
+| `columns`             | Number of columns for image grid rendering.                                                   | `2`                  |
+| `---`                 | Divider separating attribute declarations from markdown content.                              | Required before body |
 
-Everything placed below the `---` separator is parsed and rendered as standard Obsidian Markdown and LaTeX.
+## Per-Note Frontmatter Customization
+
+Override default appearance and layout rules on a per-note basis using YAML frontmatter:
+
+```yaml
+---
+scrollstream-orientation: vertical
+scrollstream-ratio: 65
+scrollstream-font-size: 13px
+scrollstream-gap: 24px
+scrollstream-radius: 8px
+---
+```
+
+| Frontmatter Key            | Type / Values                             | Description                                                                                      |
+| :------------------------- | :---------------------------------------- | :----------------------------------------------------------------------------------------------- |
+| `scrollstream-orientation` | `vertical` \| `horizontal`                | `vertical` splits editor and sidebar side-by-side. `horizontal` places the track below the text. |
+| `scrollstream-ratio`       | Number (`20` – `80`)                      | Percentage of width (or height) allocated to the main editor column.                             |
+| `scrollstream-font-size`   | CSS dimension (e.g. `12px`, `0.85em`)     | Controls text size inside the stream item body.                                                  |
+| `scrollstream-gap`         | CSS dimension (e.g. `20px`, `1.5rem`)     | Vertical spacing between timeline items and connector spine height.                              |
+| `scrollstream-radius`      | CSS dimension (e.g. `6px`, `12px`, `0px`) | Border corner radius for embedded gallery media.                                                 |
 
 ---
 
 ## Settings
 
-- **Split orientation**: Toggle between `Vertical (side-by-side)` or `Horizontal (stacked)`.
+- **Split orientation**: Default orientation (`Vertical` or `Horizontal`) when not defined in frontmatter.
 
-- **Main column width percentage**: Adjust the width ratio between the main text editor and the sidecar track (30% to 70% by default).
+- **Main column width percentage**: Default split ratio slider (`20%` to `80%`).
 
-- **Timestamp style**: Select visual presentation:
-  - _Accent color_: High contrast using your theme's active accent color.
+- **Timestamp style**: Visual preset for node header timestamps:
+  - _Accent color_: High contrast using your active theme accent.
   - _Badge_: Bordered pill container.
-  - _Dynamic sync_: Muted by default; turns accent when the node is in active focus.
-  - _Default_: Monospace faint text.
+  - _Dynamic sync_: Muted by default; highlights when the node is in active focus.
+  - _Default_: Faint monospace text.
+
+---
+
+## Development
+
+```bash
+# Setup dependencies and vault symlink
+./dev.sh setup
+
+# Run watch compiler for live reload
+./dev.sh dev
+
+# Run TypeScript compiler check, ESLint, and build
+./dev.sh check
+
+# Stage distribution assets in ./dist
+./dev.sh release
+```
 
 ---
 
 #### License
 
 [MIT](LICENSE)
+
+```
+
+```

@@ -1,29 +1,47 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import TimelineGalleryPlugin from './main';
+import ScrollstreamGalleryPlugin from './main';
 
 export type SplitOrientation = 'vertical' | 'horizontal';
 export type TimestampStyle = 'default' | 'accent' | 'badge' | 'active-sync';
 
-export interface TimelineSettings {
+export interface ScrollstreamSettings {
 	splitRatioLeft: number;
-	enableScrollStream: boolean;
 	splitOrientation: SplitOrientation;
 	timestampStyle: TimestampStyle;
 }
 
-export const DEFAULT_SETTINGS: TimelineSettings = {
-	splitRatioLeft: 50,
-	enableScrollStream: true,
+export const DEFAULT_SETTINGS: ScrollstreamSettings = {
+	splitRatioLeft: 60,
 	splitOrientation: 'vertical',
 	timestampStyle: 'accent',
 };
 
-export class TimelineSettingTab extends PluginSettingTab {
-	plugin: TimelineGalleryPlugin;
+export class ScrollstreamSettingTab extends PluginSettingTab {
+	plugin: ScrollstreamGalleryPlugin;
 
-	constructor(app: App, plugin: TimelineGalleryPlugin) {
+	constructor(app: App, plugin: ScrollstreamGalleryPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+	}
+
+	getSettingDefinitions() {
+		return [
+			{
+				name: 'Split orientation',
+				description:
+					'Vertical = side-by-side columns (text left, timeline right). Horizontal = timeline stacked below the text. Can be overridden per note with a "scrollstream-orientation" frontmatter key.',
+			},
+			{
+				name: 'Main column width percentage',
+				description:
+					'Width (vertical orientation) or height (horizontal orientation) allocated to the primary text column (default: 60). Can be overridden per note with a "scrollstream-ratio" frontmatter key.',
+			},
+			{
+				name: 'Timestamp style',
+				description:
+					'Choose visual appearance and emphasis for timeline timestamps.',
+			},
+		];
 	}
 
 	display(): void {
@@ -33,7 +51,7 @@ export class TimelineSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Split orientation')
 			.setDesc(
-				'Vertical = side-by-side columns (text left, timeline right). Horizontal = timeline stacked below the text.',
+				'Vertical = side-by-side columns (text left, timeline right). Horizontal = timeline stacked below the text. Can be overridden per note with a "scrollstream-orientation" frontmatter key.',
 			)
 			.addDropdown((dropdown) =>
 				dropdown
@@ -51,7 +69,7 @@ export class TimelineSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Main column width percentage')
 			.setDesc(
-				'Width (vertical orientation) or height (horizontal orientation) allocated to the primary text column (default: 50).',
+				'Width (vertical orientation) or height (horizontal orientation) allocated to the primary text column (default: 60). Can be overridden per note with a "scrollstream-ratio" frontmatter key.',
 			)
 			.addSlider((slider) =>
 				slider
